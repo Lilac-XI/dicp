@@ -67,3 +67,6 @@ gem 'jquery-rails'
 gem 'parallel'
 gem 'selenium-webdriver'
 gem 'dotenv'
+gem 'net-telnet'
+gem 'tor-privoxy'
+gem 'whenever', require: false

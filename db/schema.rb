@@ -10,14 +10,14 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema.define(version: 2021_02_16_034338) do
+ActiveRecord::Schema.define(version: 2021_02_19_010904) do
 
   create_table "images", options: "ENGINE=InnoDB DEFAULT CHARSET=utf8", force: :cascade do |t|
     t.integer "pdf_id"
     t.string "url"
     t.string "path"
     t.boolean "access_success"
-    t.boolean "downloaded"
+    t.boolean "downloaded", default: false
     t.datetime "created_at", null: false
     t.datetime "updated_at", null: false
   end
@@ -27,9 +27,10 @@ ActiveRecord::Schema.define(version: 2021_02_16_034338) do
     t.integer "image_size"
     t.string "path"
     t.string "url"
-    t.boolean "created"
+    t.boolean "created", default: false
     t.datetime "created_at", null: false
     t.datetime "updated_at", null: false
+    t.boolean "resized", default: false
   end
 
 end
