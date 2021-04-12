@@ -22,9 +22,12 @@ set :output, 'log/crontab.log'
 env :PATH, ENV['PATH']
 set :environment, :development
 
-every 10.minutes do
+every 3.minutes do
     rake 'image_manager:list_image'
     rake 'image_manager:url_check'
     rake 'image_manager:png_jpg_change_test'
+end
+
+every 6.minutes do
     rake 'image_manager:download_image'
 end

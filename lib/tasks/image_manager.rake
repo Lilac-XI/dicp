@@ -14,6 +14,7 @@ namespace :image_manager do
     desc "list image from Pdf.url"
     task list_image: :environment do
         sites = SpecificSiteFormatter.methods(false)
+        agent = Mechanize.new
         pdfs = Pdf.where(image_size: nil)
         pdfs.each do |pdf|
             dir_path = "#{Rails.root.join}/results/#{pdf.id}"
@@ -25,16 +26,25 @@ namespace :image_manager do
             file_name = "#{pdf.id}"
             sites.each do |site_name|
                 if pdf.url.include?(site_name.to_s)
-                    body,threshold,file_name = SpecificSiteFormatter.send(site_name, pdf.url)
+                    file_name = SpecificSiteFormatter.send(site_name, pdf.url)
                     break
                 end
             end
-            if body.nil?
-                body = OpenURI.open_uri(pdf.url).read
+            # if body.nil?
+            #     body = agent.get(pdf.url).body
+            # end
+            # puts "-----------------"
+            # image_tags = body.scan(/<img.*?>/)
+            # image_links = URLFormatter.shape_image_tags(image_tags)
+            body = agent.get(pdf.url)
+            images = body.images.map {|img| img.src}
+            image_links = Array.new
+            body.images.each do |img|
+                if img.src.start_with?("http")
+                    image_links << img.src
+                end
             end
-            puts "-----------------"
-            image_tags = body.scan(/<img.*?>/)
-            image_links = URLFormatter.shape_image_tags(image_tags)
+
             sleep 1
             similar_links = URLFormatter.split_similars(image_links, threshold)
             sleep 1
@@ -53,26 +63,41 @@ namespace :image_manager do
 
     desc "404 checker"
     task url_check: :environment do
-        images = Image.where(access_success: nil)
+        images = Image.where(access_success: nil).order(updated_at: "ASC").limit(50)
         Parallel.each(images, in_processes: 50) do |image|
+            agent = Mechanize.new
             begin
+                agent.read_timeout = 15
+                agent.open_timeout = 15
                 puts "#{image.url} check start url"
-                open(image.url, {:read_timeout => 60})
+                agent.get(image.url)
                 image.update(access_success: true)
-            rescue OpenURI::HTTPError => e
+                
+            rescue Mechanize::ResponseCodeError => e
                 puts "#{image.url} #{e}"
-                if e.to_s == "404 Not Found"
+                case e.response_code
+                when 404
                     image.update(access_success: false)
+                else
+                    puts "#{image.url} #{e}"
+                    image.touch
+                    image.save
                 end
             rescue => e
                 puts "#{image.url} #{e}"
+                image.touch
+                image.save
             end
+            agent.shutdown
         end
     end
 
     desc "cant access url check png <= => jpg"
     task png_jpg_change_test: :environment do
         images = Image.where(access_success: false)
+        agent = Mechanize.new
+        agent.read_timeout = 15
+        agent.open_timeout = 15
         images.each do |image|
             puts image.url
             if image.url.include?("jpg")
@@ -86,18 +111,22 @@ namespace :image_manager do
         Parallel.each(images, in_processes: 50) do |image|
             begin
                 puts "#{image.url} check start png_jpg"
-                open(image.url, {:read_timeout => 60})
+                agent.get(image.url)
                 puts "#{image.url} success"
-                image.access_success = true
-                image.save
-            rescue OpenURI::HTTPError => e
-                puts "#{image.url} #{e}"
-                if e.to_s == "404 Not Found"
+                image.update(access_success: true, url: image.url)
+            rescue Mechanize::ResponseCodeError => e
+                puts "#{image.url} #{e.response_code}"
+                if  e.response_code.to_s == "404"
+                    puts "404発生"
+                    image.reload
                     image.update(access_success: nil)
-                    puts "update"
+                else #404以外のエラー →タイムアウト
+                    image.save
+                    puts "#{image.url} #{e}"
                 end
-            rescue => e
+            rescue => e 
                 puts "#{image.url} #{e}"
+                image.save
             end
         end
     end
@@ -105,23 +134,18 @@ namespace :image_manager do
     desc "download image"
     task download_image: :environment do
         images = Image.where(downloaded: false, access_success: true).order(updated_at: "ASC").limit(50)
+        
         # images = Pdf.find(34).images
         Parallel.each(images, in_processes: 50) do |image|
             begin
+                agent = Mechanize.new
                 puts "#{image.url} start"
-                image_file = Magick::Image.read(image.url).first
-                image_file.format = 'JPEG'
-                image_file.compression = Magick::JPEGCompression
-                image_file.class_type = Magick::DirectClass
-                image_file.write(image.path){
-                    self.compression = Magick::JPEGCompression
-                    self.quality = 100
-                }
+                agent.get(image.url).save_as(image.path)
                 image.update(downloaded: true)
-                puts "#{image.url} finish"
+                puts "#{image.path} finish"
             rescue => e
                 puts "#{image.url} #{e}"
-                image.update(downloaded: false, access_success: false)
+                image.update(downloaded: false, access_success: nil)
                 puts "update"
             end
         end

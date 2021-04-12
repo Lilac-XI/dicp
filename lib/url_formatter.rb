@@ -27,12 +27,13 @@ module URLFormatter extend ActiveSupport::Concern
                     similars[i] = Trigram.compare url, urls[i+1]
                 end
             end
-
             l = 0
             sl = 0
             similar_urls = Array.new
             similars.each_with_index do |num,i|
-                if i >= l
+                if i == similars.size-1
+                    similar_urls[sl] = urls[l..similars.size]
+                elsif i >= l
                     if num < threshold
                         similar_urls[sl] = urls[l..i]
                         sl = sl+1
